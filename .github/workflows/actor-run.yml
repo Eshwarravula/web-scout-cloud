@@ -1,0 +1,113 @@
+name: Actor Run
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      actor:
+        description: Actor name
+        required: true
+        default: web-scout
+      input:
+        description: Actor input as JSON
+        required: true
+        default: '{"startUrls":["https://example.com"],"maxRequestsPerCrawl":1}'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: actor-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.issue.title, '[RUN] ') && github.event.issue.user.login == github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      DISPATCH_ACTOR: ${{ inputs.actor }}
+      DISPATCH_INPUT: ${{ inputs.input }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve Actor request
+        shell: bash
+        run: |
+          mkdir -p run-output
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            printf '%s' "$DISPATCH_ACTOR" > run-output/actor-name.txt
+            printf '%s' "$DISPATCH_INPUT" > run-output/input.json
+          else
+            ACTOR_NAME="${ISSUE_TITLE#\[RUN\] }"
+            printf '%s' "$ACTOR_NAME" > run-output/actor-name.txt
+            printf '%s' "$ISSUE_BODY" > run-output/input.json
+          fi
+          node -e "JSON.parse(require('fs').readFileSync('run-output/input.json','utf8'))"
+
+      - name: Comment started
+        if: github.event_name == 'issues'
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "Actor run started: \`$(cat run-output/actor-name.txt)\`. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Run Actor
+        shell: bash
+        run: |
+          export ACTOR_NAME="$(cat run-output/actor-name.txt)"
+          export ACTOR_INPUT_PATH="$PWD/run-output/input.json"
+          npm run actor
+
+      - name: Upload dataset and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actor-${{ github.event.issue.number || github.run_id }}-${{ github.run_attempt }}
+          path: run-output/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Comment result
+        if: always() && github.event_name == 'issues'
+        shell: bash
+        run: |
+          if [ -f run-output/summary.md ]; then
+            {
+              echo "### Actor result"
+              echo
+              cat run-output/summary.md
+              echo
+              echo "---"
+              echo "Full output: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            } > run-output/issue-comment.md
+          else
+            {
+              echo "### Actor run failed"
+              echo
+              echo "Run logs: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            } > run-output/issue-comment.md
+          fi
+          head -c 50000 run-output/issue-comment.md > run-output/issue-comment-truncated.md
+          gh issue comment "$ISSUE_NUMBER" --body-file run-output/issue-comment-truncated.md
