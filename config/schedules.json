@@ -1,0 +1,15 @@
+{
+  "schedules": [
+    {
+      "name": "example-disabled",
+      "enabled": false,
+      "actor": "web-scout",
+      "cron": "0 9 * * *",
+      "timezone": "Asia/Kolkata",
+      "input": {
+        "startUrls": ["https://example.com"],
+        "maxRequestsPerCrawl": 1
+      }
+    }
+  ]
+}
