@@ -1,0 +1,20 @@
+{
+  "name": "web-scout-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Card-free Actor-style cloud runner using GitHub Actions, Crawlee and Playwright.",
+  "scripts": {
+    "actor": "node scripts/run-actor.js",
+    "scheduled": "node scripts/run-scheduled.js",
+    "validate": "node scripts/validate-config.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "crawlee": "3.18.1",
+    "playwright": "1.63.0",
+    "cron-parser": "^5.3.1"
+  }
+}
