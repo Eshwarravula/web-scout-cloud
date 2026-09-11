@@ -11,6 +11,10 @@ function normalizeStartUrls(input) {
     .map((url) => ({ url }));
 }
 
+function compactText(value, max = 700) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
 export async function run(input, context) {
   const startUrls = normalizeStartUrls(input);
   if (!startUrls.length) throw new Error('web-scout requires input.startUrls or input.urls');
@@ -49,7 +53,12 @@ export async function run(input, context) {
 
         return {
           title: document.title || '',
-          description: document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
+          description:
+            document.querySelector('meta[name="description"]')?.getAttribute('content') ||
+            document.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+            document.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
+            '',
+          ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '',
           h1: Array.from(document.querySelectorAll('h1'))
             .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
             .filter(Boolean)
@@ -65,6 +74,7 @@ export async function run(input, context) {
         depth: request.userData?.depth ?? 0,
         scrapedAt: new Date().toISOString(),
         title: data.title,
+        ogTitle: data.ogTitle,
         description: data.description,
         h1: data.h1,
         text: data.text,
@@ -95,17 +105,22 @@ export async function run(input, context) {
     'utf8',
   );
 
-  const sample = items.slice(0, 10);
+  const sample = items.slice(0, 50);
   const summary = [
     `**Actor:** \`${context.actorName}\``,
     `**Pages scraped:** ${items.length}`,
     '',
     '#### Sample',
     '',
-    ...sample.flatMap((item, i) => [
-      `${i + 1}. **${String(item.title || '(no title)').replace(/\n/g, ' ')}**`,
-      `   ${item.url}`,
-    ]),
+    ...sample.flatMap((item, i) => {
+      const excerpt = compactText(item.description || item.text, 700);
+      const title = compactText(item.ogTitle || item.title || '(no title)', 300);
+      return [
+        `${i + 1}. **${title.replace(/\n/g, ' ')}**`,
+        `   ${item.url}`,
+        excerpt ? `   ${excerpt}` : '   (no public profile text exposed)',
+      ];
+    }),
   ];
 
   if (items.length > sample.length) {
