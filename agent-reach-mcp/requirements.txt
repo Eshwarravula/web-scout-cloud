@@ -1,0 +1,3 @@
+mcp==2.2.0
+httpx>=0.28,<1
+agent-reach @ git+https://github.com/Panniantong/Agent-Reach.git@da5044d26fc6adddb6554d5679c94ac22e76e428
